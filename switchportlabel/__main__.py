@@ -1,59 +1,50 @@
 #!/usr/bin/env python3
 
 from operator import itemgetter
-import itertools
-import sys
-import os
 import configparser
-from glob import glob
-import json
-from subprocess import check_call
+import itertools
+import os
+import shutil
+import sys
 
-from . import data_lldp
+from . import acquire_puppetdb
+from . import acquire_switches
+
+DATADIR_PUPPETDB = "data/puppetdb/"
+DATADIR_SWITCHES = "data/switches/"
 
 
 def read_switch_connect_options():
     devices = {}
     device_parser = configparser.ConfigParser()
     device_parser.read("data/switches.ini")
-    for devicename in device_parser.sections():
+    for device_name in device_parser.sections():
         d = {}
-        for option, value in device_parser[devicename].items():
+        for option, value in device_parser[device_name].items():
             d[option] = value
         if "ip" not in d:
-            d["ip"] = devicename
-        devices[devicename] = d
+            d["ip"] = device_name
+        devices[device_name] = d
     return devices
 
 
 def do_acquire_switches():
-    from . import acquire_switches
-
+    datadir = DATADIR_SWITCHES
+    shutil.rmtree(datadir)
+    os.makedirs(datadir)
     devices = read_switch_connect_options()
-    for devicename, connect_options in devices.items():
-        acquire_switches.acquire(devicename, connect_options, "data/switches/")
+    for device_name, connect_options in devices.items():
+        acquire_switches.acquire(device_name, connect_options, datadir)
 
 
 def do_acquire_puppetdb():
+    datadir = DATADIR_PUPPETDB
+    shutil.rmtree(datadir)
+    os.makedirs(datadir)
     device_parser = configparser.ConfigParser()
     device_parser.read("data/puppetdb.ini")
-    for devicename in device_parser.sections():
-        with open("data/puppetdb.fibrechannel.json", "wb") as fd:
-            check_call(
-                [
-                    "ssh",
-                    devicename,
-                    "--",
-                    "curl",
-                    "-G",
-                    "http://localhost:8080/pdb/query/v4/facts",
-                    "--data-urlencode",
-                    'query=["and",["=","node_state","active"],["=","name","fibrechannel"]]'.replace(
-                        '"', '\\"'
-                    ),
-                ],
-                stdout=fd,
-            )
+    for device_name in device_parser.sections():
+        acquire_puppetdb.acquire(device_name, {}, datadir)
 
 
 def set_port_attr(switches, switchname, switchport, attr, value):
@@ -83,25 +74,9 @@ def do_configure(apply_changes):
 
     switch_connect_options = read_switch_connect_options() if apply_changes else None
 
-    lldp_ifaces = []
-    for fn in glob("data/lldpcli/*.txt"):
-        devicename = fn.split("/")[-1].split(".")[0]
-        with open(fn, "rt") as fp:
-            lldp_ifaces.extend(data_lldp.parse_lldpcli(devicename, fp.read()))
+    switches = acquire_switches.read_switches(DATADIR_SWITCHES)
 
-    switches = {}
-    for fn in glob("data/switches/*.json"):
-        devicename = fn.split("/")[-1].split(".")[0]
-        with open(fn, "rt") as fp:
-            switches[devicename] = json.load(fp)
-
-    puppetdb_fc = {}
-    with open("data/puppetdb.fibrechannel.json", "rt") as fp:
-        for el in json.load(fp):
-            if not el["value"]["hosts"]:
-                continue
-            puppetdb_fc[el["certname"]] = el["value"]["hosts"]
-
+    lldp_ifaces = acquire_puppetdb.read_lldp(DATADIR_PUPPETDB)
     for iface in lldp_ifaces:
         set_port_attr(
             switches,
@@ -118,6 +93,7 @@ def do_configure(apply_changes):
             iface["hostport"],
         )
 
+    puppetdb_fc = acquire_puppetdb.read_fibrechannel(DATADIR_PUPPETDB)
     for hostname, hosts in puppetdb_fc.items():
         for host_id, detail in hosts.items():
             port_name = detail["port_name"]
@@ -147,34 +123,43 @@ def do_configure(apply_changes):
             lines.extend(lineset)
 
         if apply_changes:
-            try:
-                import netmiko
-
-                conn = netmiko.Netmiko(**switch_connect_options[switchname])
-                print(conn.send_config_set(lines))
-                if switch_connect_options[switchname]["device_type"] == "cisco_nxos":
-                    print(conn.send_command("copy running-config startup-config"))
-                else:
-                    print(conn.send_command("save main force"))
-            finally:
-                del conn
+            acquire_switches.apply_config(
+                device_name, switch_connect_options[switchname], lines
+            )
         else:
             print("\n".join(lines))
 
 
 def main(args):
     action = args[1]
+    ok = False
+
     if action == "configure":
         do_configure(False)
+        ok = True
 
-    elif action == "configure-apply":
+    if action == "configure-apply":
         do_configure(True)
+        ok = True
 
-    elif action == "acquire-switches":
-        do_acquire_switches()
-
-    elif action == "acquire-puppetdb":
+    if action in ("acquire", "acquire-puppetdb"):
         do_acquire_puppetdb()
+        ok = True
+
+    if action in ("acquire", "acquire-switches"):
+        do_acquire_switches()
+        ok = True
+
+    if not ok:
+        print("Usage: %s ACTION" % args[0])
+        print()
+        print("Where ACTION is one of:")
+        print("  * configure")
+        print("  * configure-apply")
+        print("  * acquire")
+        print("  * acquire-puppetdb")
+        print("  * acquire-switches")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

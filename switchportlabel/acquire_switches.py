@@ -1,3 +1,4 @@
+from glob import glob
 from netmiko import Netmiko
 import json
 
@@ -232,13 +233,13 @@ def parse_comware_interfaces(text):
     return {iface["name"]: iface for iface in ifaces}
 
 
-def acquire(devicename, connect_options, datadir):
-    print("Connecting to", devicename)
+def acquire(device_name, connect_options, datadir):
+    print("Connecting to", device_name)
     try:
         conn = Netmiko(**connect_options)
         device_type = connect_options["device_type"]
 
-        total = {"device_type": device_type}
+        total = {"device_type": device_type, "device_name": device_name}
 
         if device_type.startswith("cisco_"):
             text = conn.send_command("show int")
@@ -266,8 +267,37 @@ def acquire(devicename, connect_options, datadir):
             total["_flogi_raw"] = ""
             total["flogi"] = []
 
-        with open("%s/%s.json" % (datadir, devicename), "wt") as fp:
+        with open("%s/%s.json" % (datadir, device_name), "wt") as fp:
             json.dump(total, fp)
 
+    finally:
+        del conn
+
+
+def read_switches(datadir):
+    switches = {}
+    for fn in glob("%s/*.json" % datadir):
+        with open(fn, "rt") as fp:
+            switch = json.load(fp)
+            switches[switch["device_name"]] = switch
+
+    return switches
+
+
+def apply_config(device_name, connect_options, lines):
+    device_type = connect_options["device_type"]
+
+    try:
+        conn = netmiko.Netmiko(**connect_options)
+        print(conn.send_config_set(lines))
+        if device_type in ("cisco_ios", "cisco_nxos"):
+            print(conn.send_command("copy running-config startup-config"))
+        elif device_type == "hp_comware":
+            print(conn.send_command("save main force"))
+        else:
+            print(
+                "ERROR: configuration not saved, as device_type %s is unhandled"
+                % device_type
+            )
     finally:
         del conn
