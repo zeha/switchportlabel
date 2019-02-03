@@ -4,9 +4,11 @@ def format_cisco_nxos(ports):
         port_lines = []
 
         command = "switchport description" if detail["type"] == "Fibre Channel" else "description"
-        new_description = detail["new_description"]
+        new_description = detail.get("new_description", None)
         old_description = detail.get("description", None)
         if new_description and new_description != old_description:
+            if old_description:
+                port_lines.append("  # before: %s" % (old_description,))
             port_lines.append("  %s %s" % (command, new_description))
         # elif detail.get('description', None):
         #     port_lines.append("-- was %s" % detail['description'])
@@ -23,8 +25,12 @@ def format_hp_comware(ports):
         port_lines = []
 
         command = "description"
-        if detail["new_description"] and detail.get("description", None) != detail["new_description"]:
-            port_lines.append("  %s %s" % (command, detail["new_description"]))
+        new_description = detail.get("new_description", None)
+        old_description = detail.get("description", None)
+        if new_description and new_description != old_description:
+            if old_description:
+                port_lines.append("  # before: %s" % (old_description,))
+            port_lines.append("  %s %s" % (command, new_description))
         # elif detail.get('description', None):
         #     port_lines.append("-- was %s" % detail['description'])
         #     port_lines.append("  no %s" % command)
