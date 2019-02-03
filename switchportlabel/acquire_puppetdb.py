@@ -4,9 +4,7 @@ import json
 
 
 def ssh_curl_into_file(device_name, fact_name, outfile):
-    query = (
-        'query=["and",["=","node_state","active"],["=","name","' + fact_name + '"]]'
-    ).replace('"', '\\"')
+    query = ('query=["and",["=","node_state","active"],["=","name","' + fact_name + '"]]').replace('"', '\\"')
     command = [
         "ssh",
         device_name,

@@ -28,12 +28,7 @@ def parse_lldpcli(hostname, text):
         line = line.strip()
         if line.startswith("Interface:"):
             hostport = line.split()[1].rstrip(",")
-            iface = {
-                "switchname": None,
-                "switchport": None,
-                "hostname": hostname,
-                "hostport": hostport,
-            }
+            iface = {"switchname": None, "switchport": None, "hostname": hostname, "hostport": hostport}
         elif line.startswith("---"):
             if iface is not None and iface["switchport"] is not None:
                 ifaces.append(iface)

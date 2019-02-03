@@ -89,12 +89,7 @@ def parse_cisco_interfaces(text):
             name = name.replace("Ethernet", "Eth")
             name = name.replace("port-channel", "Po")
             iface = {"name": name, "state": wsplit[2]}  # up/down
-        elif (
-            iface
-            and indent
-            and line.startswith("Dedicated Interface")
-            or line.startswith("vPC Status:")
-        ):
+        elif iface and indent and line.startswith("Dedicated Interface") or line.startswith("vPC Status:"):
             continue
         elif iface and indent and line.startswith("Port description is"):
             iface["description"] = line.split("Port description is ", 1)[1].strip()
@@ -219,13 +214,9 @@ def parse_comware_interfaces(text):
                 iface["description"] = csplit[1]
             elif csplit[0] == "Description":
                 iface["description"] = csplit[1]
-            elif csplit[0] == "IP packet frame type" and csplit[1].startswith(
-                "Ethernet"
-            ):
+            elif csplit[0] == "IP packet frame type" and csplit[1].startswith("Ethernet"):
                 iface["type"] = "Ethernet"
-                iface["address"] = (
-                    csplit[1].split(",")[1].split(":")[1].strip().replace("-", "")
-                )
+                iface["address"] = csplit[1].split(",")[1].split(":")[1].strip().replace("-", "")
 
     if iface:
         ifaces.append(iface)
@@ -295,9 +286,6 @@ def apply_config(device_name, connect_options, lines):
         elif device_type == "hp_comware":
             print(conn.send_command("save main force"))
         else:
-            print(
-                "ERROR: configuration not saved, as device_type %s is unhandled"
-                % device_type
-            )
+            print("ERROR: configuration not saved, as device_type %s is unhandled" % device_type)
     finally:
         del conn
