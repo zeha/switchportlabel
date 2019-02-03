@@ -3,7 +3,18 @@ from netmiko import Netmiko
 import json
 
 
-def parse_cisco_interfaces(text):
+ACQUIRE_COMMANDS = {
+    "interfaces": {"cisco_nxos": "show int", "hp_comware": "display interface"},
+    "flogi": {"cisco_nxos": "show flogi database"},
+    "lldp": {
+        "cisco_nxos": "show lldp neighbors detail | json",
+        "hp_comware-7": "display lldp neighbor-information agent nearest-bridge verbose",
+        "hp_comware-5": "display lldp neighbor-information",
+    },
+}
+
+
+def parse_cisco_nxos_interfaces(device_name, text):
     """
     fc2/11 is down (Link failure: loss of sync)
         Port description is foo
@@ -108,10 +119,16 @@ def parse_cisco_interfaces(text):
 
     if iface:
         ifaces.append(iface)
-    return {iface["name"]: iface for iface in ifaces}
+    return ifaces
 
 
-def parse_cisco_nxos_flogi(text):
+def map_flogi(switch, data):
+    if not data:
+        return {}
+    return data
+
+
+def parse_cisco_nxos_flogi(device_name, text):
     """
     --------------------------------------------------------------------------------
     INTERFACE        VSAN    FCID           PORT NAME               NODE NAME
@@ -138,7 +155,13 @@ def parse_cisco_nxos_flogi(text):
     return rows
 
 
-def parse_comware_interfaces(text):
+def map_interfaces(switch, data):
+    if not data:
+        return {}
+    return {iface["name"]: iface for iface in data}
+
+
+def parse_hp_comware_interfaces(device_name, text):
     """
     Ten-GigabitEthernet2/0/34
     Current state: UP
@@ -211,6 +234,10 @@ def parse_comware_interfaces(text):
             elif indent == 0:
                 # comware 7, state is in a dedicated line
                 iface = {"name": line}
+        elif indent == 0 and line.startswith("Media type is"):
+            line = line.split(", ")
+            if line[1].split()[-1].startswith("STACK_"):
+                iface["stack"] = True
         elif indent == 0:
             csplit = line.split(": ", 1)
             if csplit[0] == "Current state":
@@ -225,43 +252,130 @@ def parse_comware_interfaces(text):
 
     if iface:
         ifaces.append(iface)
+    return ifaces
 
-    return {iface["name"]: iface for iface in ifaces}
+
+def map_lldp(switch, data):
+    if not data:
+        return {}
+    return data
 
 
-def acquire(device_name, connect_options, datadir):
+def parse_cisco_nxos_lldp(device_name, json_text):
+    ifaces = []
+    rows = json.loads(json_text)["TABLE_nbor_detail"]["ROW_nbor_detail"]
+    for row in rows:
+        if row["l_port_id"] == "mgmt0":
+            continue
+        iface = {
+            "switchname": device_name,
+            "switchport": row["l_port_id"],
+            "hostname": row["sys_name"],
+            "hostport": row["port_id"],
+        }
+        ifaces.append(iface)
+    return ifaces
+
+
+def parse_hp_comware_lldp(device_name, text):
+    """
+    LLDP neighbor-information of port 33[Ten-GigabitEthernet1/0/33]:
+    LLDP agent nearest-bridge:
+    LLDP neighbor index : 1
+    Update time         : 1 days, 23 hours, 7 minutes, 8 seconds
+    Chassis type        : MAC address
+    Chassis ID          : acxx-xxxx-xxxx
+    Port ID type        : MAC address
+    Port ID             : acxx-xxxx-xxxx
+    Time to live        : 120
+    Port description    : eth5
+    System name         : something
+    System description  : Debian GNU/Linux (stretch) Linux #1 SMP
+                        PVE (yolo +0100) x86_64
+    System capabilities supported : Bridge, WlanAccessPoint, Router, StationOnly
+    System capabilities enabled   : StationOnly
+    Management address type           : IPv4
+    Management address                : 192.168.1.1
+    Management address interface type : IfIndex
+    Management address interface ID   : 6
+    Management address OID            : 0
+    Management address type           : IPv6
+    Management address                : FE80::X:X:X:X
+    Management address interface type : IfIndex
+    Management address interface ID   : 3
+    Management address OID            : 0
+    Link aggregation supported : Yes
+    Link aggregation enabled   : No
+    Aggregation port ID        : 0
+    Auto-negotiation supported : Yes
+    Auto-negotiation enabled   : Yes
+    OperMau                    : Speed(1000)/Duplex(Full)
+
+    """
+    iface = None
+    ifaces = []
+    for line in text.splitlines():
+        if line == "" and iface:
+            ifaces.append(iface)
+            iface = None
+        if not line:
+            continue
+
+        indent = 0
+        for char in line:
+            if char == " ":
+                indent += 1
+            else:
+                break
+
+        line = line.strip()
+
+        if not iface:
+            if indent == 0 and line.startswith("LLDP neighbor-information of port"):
+                iface = {"switchname": device_name, "switchport": line.split("[")[1].split("]")[0].strip()}
+        else:
+            csplit = line.split(": ", 1)
+            csplit[0] = csplit[0].strip()
+            if len(csplit) > 1:
+                csplit[1] = csplit[1].strip()
+                if csplit[0] == "Port ID":
+                    iface["hostport"] = csplit[1]
+                elif csplit[0] == "Port ID type":
+                    iface["hostporttype"] = csplit[1]
+                elif csplit[0] == "Port ID description":
+                    if iface["hostporttype"] == "MAC address":
+                        iface["hostport"] = csplit[1]
+                    else:
+                        del iface["hostporttype"]
+                elif csplit[0] == "System name":
+                    iface["hostname"] = csplit[1]
+
+    if iface:
+        ifaces.append(iface)
+    return ifaces
+
+
+def acquire(device_name, device_options, datadir):
     print("Connecting to", device_name)
     try:
+        device_type = device_options["device_type"]
+        device_type_flavor = device_options.get("device_type_flavor", "")
+
+        connect_options = dict(device_options)
+        if "device_type_flavor" in connect_options:
+            del connect_options["device_type_flavor"]
         conn = Netmiko(**connect_options)
-        device_type = connect_options["device_type"]
 
-        total = {"device_type": device_type, "device_name": device_name}
-
-        if device_type.startswith("cisco_"):
-            text = conn.send_command("show int")
-            data = parse_cisco_interfaces(text)
-        elif device_type == "hp_comware":
-            text = conn.send_command("display interface")
-            data = parse_comware_interfaces(text)
-        else:
-            raise ValueError("unsupported device_type " + device_type)
-        total["_interfaces_raw"] = text
-        total["interfaces"] = data
-
-        if device_type == "cisco_nxos":
-            text = conn.send_command("show flogi database")
-            data = parse_cisco_nxos_flogi(text)
-        elif device_type == "hp_comware":
-            data = None
-        else:
-            data = None
-
-        if data:
-            total["_flogi_raw"] = text
-            total["flogi"] = data
-        else:
-            total["_flogi_raw"] = ""
-            total["flogi"] = []
+        total = {"device_type": device_type, "device_type_flavor": device_type_flavor, "device_name": device_name}
+        for datatype, device_commands in ACQUIRE_COMMANDS.items():
+            command = device_commands.get("%s-%s" % (device_type, device_type_flavor), None)
+            if not command:
+                command = device_commands.get(device_type, None)
+            if command:
+                text = conn.send_command(command)
+            else:
+                text = ""
+            total["raw_%s" % datatype] = text
 
         with open("%s/%s.json" % (datadir, device_name), "wt") as fp:
             json.dump(total, fp)
@@ -275,7 +389,18 @@ def read_switches(datadir):
     for fn in glob("%s/*.json" % datadir):
         with open(fn, "rt") as fp:
             switch = json.load(fp)
-            switches[switch["device_name"]] = switch
+            device_name = switch["device_name"]
+            device_type = switch["device_type"]
+            for datatype in ACQUIRE_COMMANDS:
+                parse_funcname = "parse_%s_%s" % (device_type, datatype)
+                mapper_funcname = "map_%s" % (datatype,)
+                if parse_funcname in globals():
+                    data = globals()[parse_funcname](device_name, switch["raw_%s" % datatype])
+                else:
+                    data = None
+                switch[datatype] = globals()[mapper_funcname](switch, data)
+
+            switches[device_name] = switch
 
     return switches
 
