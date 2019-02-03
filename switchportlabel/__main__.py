@@ -12,7 +12,7 @@ DATADIR_PUPPETDB = "data/puppetdb/"
 DATADIR_SWITCHES = "data/switches/"
 
 
-def read_switch_connect_options():
+def read_switch_device_options():
     devices = {}
     device_parser = configparser.ConfigParser()
     device_parser.read("data/switches.ini")
@@ -35,9 +35,9 @@ def clean_datadir(datadir):
 def do_acquire_switches():
     datadir = DATADIR_SWITCHES
     clean_datadir(datadir)
-    devices = read_switch_connect_options()
-    for device_name, connect_options in devices.items():
-        acquire_switches.acquire(device_name, connect_options, datadir)
+    devices = read_switch_device_options()
+    for device_name, device_options in devices.items():
+        acquire_switches.acquire(device_name, device_options, datadir)
 
 
 def do_acquire_puppetdb():
@@ -75,7 +75,7 @@ def do_configure(apply_changes):
     from .configure import configure
     from .configure_formatters import format_for
 
-    switch_connect_options = read_switch_connect_options() if apply_changes else None
+    switch_device_options = read_switch_device_options() if apply_changes else None
 
     switches = acquire_switches.read_switches(DATADIR_SWITCHES)
 
@@ -96,7 +96,7 @@ def do_configure(apply_changes):
             lines.extend(lineset)
 
         if apply_changes:
-            acquire_switches.apply_config(switchname, switch_connect_options[switchname], lines)
+            acquire_switches.apply_config(switchname, switch_device_options[switchname], lines)
         else:
             print("\n".join(lines))
 

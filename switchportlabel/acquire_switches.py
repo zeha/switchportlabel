@@ -355,18 +355,22 @@ def parse_hp_comware_lldp(device_name, text):
     return ifaces
 
 
+def connect_options(device_options):
+    connect_options = dict()
+    connect_options.update(device_options)
+    if "device_type_flavor" in connect_options:
+        del connect_options["device_type_flavor"]
+    return connect_options
+
+
 def acquire(device_name, device_options, datadir):
     print("Connecting to", device_name)
+    device_type = device_options["device_type"]
+    device_type_flavor = device_options.get("device_type_flavor", "")
+    total = {"device_type": device_type, "device_type_flavor": device_type_flavor, "device_name": device_name}
     try:
-        device_type = device_options["device_type"]
-        device_type_flavor = device_options.get("device_type_flavor", "")
+        conn = Netmiko(**connect_options(device_options))
 
-        connect_options = dict(device_options)
-        if "device_type_flavor" in connect_options:
-            del connect_options["device_type_flavor"]
-        conn = Netmiko(**connect_options)
-
-        total = {"device_type": device_type, "device_type_flavor": device_type_flavor, "device_name": device_name}
         for datatype, device_commands in ACQUIRE_COMMANDS.items():
             command = device_commands.get("%s-%s" % (device_type, device_type_flavor), None)
             if not command:
@@ -405,11 +409,11 @@ def read_switches(datadir):
     return switches
 
 
-def apply_config(device_name, connect_options, lines):
-    device_type = connect_options["device_type"]
+def apply_config(device_name, device_options, lines):
+    device_type = device_options["device_type"]
 
     try:
-        conn = Netmiko(**connect_options)
+        conn = Netmiko(**connect_options(device_options))
         print(conn.send_config_set(lines))
         if device_type in ("cisco_ios", "cisco_nxos"):
             print(conn.send_command("copy running-config startup-config"))
