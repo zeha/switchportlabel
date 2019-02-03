@@ -96,7 +96,7 @@ def do_configure(apply_changes):
             lines.extend(lineset)
 
         if apply_changes:
-            acquire_switches.apply_config(device_name, switch_connect_options[switchname], lines)
+            acquire_switches.apply_config(switchname, switch_connect_options[switchname], lines)
         else:
             print("\n".join(lines))
 

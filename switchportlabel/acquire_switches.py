@@ -279,7 +279,7 @@ def apply_config(device_name, connect_options, lines):
     device_type = connect_options["device_type"]
 
     try:
-        conn = netmiko.Netmiko(**connect_options)
+        conn = Netmiko(**connect_options)
         print(conn.send_config_set(lines))
         if device_type in ("cisco_ios", "cisco_nxos"):
             print(conn.send_command("copy running-config startup-config"))
