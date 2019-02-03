@@ -8,7 +8,7 @@ def format_cisco_nxos(ports):
         old_description = detail.get("description", None)
         if new_description and new_description != old_description:
             if old_description:
-                port_lines.append("  # before: %s" % (old_description,))
+                port_lines.append("#   before: %s" % (old_description,))
             port_lines.append("  %s %s" % (command, new_description))
         # elif detail.get('description', None):
         #     port_lines.append("-- was %s" % detail['description'])
