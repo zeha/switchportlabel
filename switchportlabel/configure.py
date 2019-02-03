@@ -18,26 +18,35 @@ def format_description(switchport):
     remote_switchname = switchport.get("remote_switchname", "").split(".")[0]
     remote_switchport = switchport.get("remote_switchport", "")
 
-    if hostname and hostport:
-        desc = "Cust: %s %s" % (hostname, hostport)
-    elif hostname:
-        desc = "Cust: %s" % (hostname,)
-    else:
-        if remote_switchname and remote_switchport:
-            desc = "Core: %s %s" % (remote_switchname, remote_switchport)
-        elif hostname:
-            desc = "Core: %s" % (remote_switchname,)
+    desc = None
+
+    if hostname:
+        type = "Cust"
+        if hostport:
+            desc = "%s: %s %s" % (type, hostname, hostport)
         else:
-            desc = None
+            desc = "%s: %s" % (type, hostname)
+
+    elif remote_switchname:
+        type = "Core"
+        if remote_switchport == 'mgmt0':
+            type = "Cust"
+
+        if remote_switchport:
+            desc = "%s: %s %s" % (type, remote_switchname, remote_switchport)
+        else:
+            desc = "%s: %s" % (type, remote_switchname)
 
     return desc
 
 
-def configure(switches, lldp_ifaces, puppetdb_fc):
+def link_hosts_lldp(switches, lldp_ifaces):
     for iface in lldp_ifaces:
         set_port_attr(switches, iface["switchname"], iface["switchport"], "hostname", iface["hostname"])
         set_port_attr(switches, iface["switchname"], iface["switchport"], "hostport", iface["hostport"])
 
+
+def link_hosts_fc(switches, puppetdb_fc):
     for hostname, hosts in puppetdb_fc.items():
         for host_id, detail in hosts.items():
             port_name = detail["port_name"]
@@ -46,6 +55,22 @@ def configure(switches, lldp_ifaces, puppetdb_fc):
                     if row["port_name"] == port_name:
                         set_port_attr(switches, switchname, row["switchport"], "hostname", hostname)
                         set_port_attr(switches, switchname, row["switchport"], "hostport", host_id)
+
+
+def link_switches_lldp(switches):
+    for switchname in switches:
+        for iface in switches[switchname]["lldp"]:
+            if iface["hostname"] in switches:
+                set_port_attr(switches, switchname, iface["switchport"], "remote_switchname", iface["hostname"])
+                set_port_attr(switches, switchname, iface["switchport"], "remote_switchport", iface["hostport"])
+                set_port_attr(switches, iface["hostname"], iface["hostport"], "remote_switchname", switchname)
+                set_port_attr(switches, iface["hostname"], iface["hostport"], "remote_switchport", iface["switchport"])
+
+
+def configure(switches, lldp_ifaces, puppetdb_fc):
+    link_hosts_lldp(switches, lldp_ifaces)
+    link_hosts_fc(switches, puppetdb_fc)
+    link_switches_lldp(switches)
 
     for switchname, switch in switches.items():
         for portname, detail in switch["interfaces"].items():
