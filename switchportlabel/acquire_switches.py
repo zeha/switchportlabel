@@ -204,7 +204,12 @@ def parse_comware_interfaces(text):
         line = line.strip()
 
         if not iface:
-            if indent == 0:
+            if indent in (0, 1) and 'current state:' in line:
+                # comware 5
+                line = line.split()
+                iface = {"name": line[0], "state": line[3].lower()}
+            elif indent == 0:
+                # comware 7, state is in a dedicated line
                 iface = {"name": line}
         elif indent == 0:
             csplit = line.split(": ", 1)
