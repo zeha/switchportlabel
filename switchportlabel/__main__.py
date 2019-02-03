@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from operator import itemgetter
 import configparser
 import itertools
@@ -28,10 +26,15 @@ def read_switch_connect_options():
     return devices
 
 
+def clean_datadir(datadir):
+    if os.path.exists(datadir):
+        shutil.rmtree(datadir)
+    os.makedirs(datadir)
+
+
 def do_acquire_switches():
     datadir = DATADIR_SWITCHES
-    shutil.rmtree(datadir)
-    os.makedirs(datadir)
+    clean_datadir(datadir)
     devices = read_switch_connect_options()
     for device_name, connect_options in devices.items():
         acquire_switches.acquire(device_name, connect_options, datadir)
@@ -39,8 +42,7 @@ def do_acquire_switches():
 
 def do_acquire_puppetdb():
     datadir = DATADIR_PUPPETDB
-    shutil.rmtree(datadir)
-    os.makedirs(datadir)
+    clean_datadir(datadir)
     device_parser = configparser.ConfigParser()
     device_parser.read("data/puppetdb.ini")
     for device_name in device_parser.sections():
@@ -70,6 +72,7 @@ def format_description(switchport):
 
 
 def do_configure(apply_changes):
+    from .configure import configure
     from .configure_formatters import format_for
 
     switch_connect_options = read_switch_connect_options() if apply_changes else None
@@ -77,47 +80,17 @@ def do_configure(apply_changes):
     switches = acquire_switches.read_switches(DATADIR_SWITCHES)
 
     lldp_ifaces = acquire_puppetdb.read_lldp(DATADIR_PUPPETDB)
-    for iface in lldp_ifaces:
-        set_port_attr(
-            switches,
-            iface["switchname"],
-            iface["switchport"],
-            "hostname",
-            iface["hostname"],
-        )
-        set_port_attr(
-            switches,
-            iface["switchname"],
-            iface["switchport"],
-            "hostport",
-            iface["hostport"],
-        )
 
     puppetdb_fc = acquire_puppetdb.read_fibrechannel(DATADIR_PUPPETDB)
-    for hostname, hosts in puppetdb_fc.items():
-        for host_id, detail in hosts.items():
-            port_name = detail["port_name"]
-            for switchname, switch in switches.items():
-                for row in switch["flogi"]:
-                    if row["port_name"] == port_name:
-                        set_port_attr(
-                            switches,
-                            switchname,
-                            row["switchport"],
-                            "hostname",
-                            hostname,
-                        )
-                        set_port_attr(
-                            switches, switchname, row["switchport"], "hostport", host_id
-                        )
+
+    configure(switches, lldp_ifaces, puppetdb_fc)
 
     for switchname, switch in switches.items():
-        for portname, detail in switch["interfaces"].items():
-            detail["new_description"] = format_description(detail)
-
-    for switchname, switch in switches.items():
-        print("--- ", switchname)
         linesets = format_for(switch)
+        if not linesets:
+            continue
+
+        print("--", switchname)
         lines = []
         for lineset in linesets:
             lines.extend(lineset)
