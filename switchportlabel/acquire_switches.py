@@ -356,36 +356,41 @@ def parse_hp_comware_lldp(device_name, text):
 
 
 def connect_options(device_options):
-    connect_options = dict()
-    connect_options.update(device_options)
-    if "device_type_flavor" in connect_options:
-        del connect_options["device_type_flavor"]
-    return connect_options
+    return {
+        'ip': device_options['ip'],
+        'username': device_options['username'],
+        'password': device_options['password'],
+        'device_type': device_options['device_type'],
+    }
 
 
 def acquire(device_name, device_options, datadir):
-    print("Connecting to", device_name)
     device_type = device_options["device_type"]
     device_type_flavor = device_options.get("device_type_flavor", "")
     total = {"device_type": device_type, "device_type_flavor": device_type_flavor, "device_name": device_name}
-    try:
-        conn = Netmiko(**connect_options(device_options))
 
-        for datatype, device_commands in ACQUIRE_COMMANDS.items():
-            command = device_commands.get("%s-%s" % (device_type, device_type_flavor), None)
-            if not command:
-                command = device_commands.get(device_type, None)
-            if command:
-                text = conn.send_command(command)
-            else:
-                text = ""
-            total["raw_%s" % datatype] = text
+    if device_type != 'none':
+        print("Connecting to", device_name)
+        try:
+            conn = Netmiko(**connect_options(device_options))
 
-        with open("%s/%s.json" % (datadir, device_name), "wt") as fp:
-            json.dump(total, fp)
+            for datatype, device_commands in ACQUIRE_COMMANDS.items():
+                command = device_commands.get("%s-%s" % (device_type, device_type_flavor), None)
+                if not command:
+                    command = device_commands.get(device_type, None)
+                if command:
+                    text = conn.send_command(command)
+                else:
+                    text = ""
+                total["raw_%s" % datatype] = text
+        finally:
+            del conn
+    else:
+        for datatype in ACQUIRE_COMMANDS:
+            total["raw_%s" % datatype] = ""
 
-    finally:
-        del conn
+    with open("%s/%s.json" % (datadir, device_name), "wt") as fp:
+        json.dump(total, fp)
 
 
 def read_switches(datadir):

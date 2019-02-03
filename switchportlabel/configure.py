@@ -1,5 +1,4 @@
 import itertools
-from .configure_formatters import format_for
 
 
 def set_port_attr(switches, switchname, switchport, attr, value):
