@@ -37,6 +37,9 @@ def format_description(switchport):
         else:
             desc = "%s: %s" % (type, remote_switchname)
 
+    if switchport.get("stack", False):
+        desc += " [STACK]"
+
     return desc
 
 
