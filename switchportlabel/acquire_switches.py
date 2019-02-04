@@ -109,7 +109,8 @@ def parse_cisco_nxos_interfaces(device_name, text):
             name = wsplit[0]
             name = name.replace("Ethernet", "Eth")
             name = name.replace("port-channel", "Po")
-            iface = {"name": name, "state": wsplit[2]}  # up/down
+            state = wsplit[2]  # up/down
+            iface = {"switchname": device_name, "switchport": name, "state": state}
         elif iface and indent and line.startswith("Dedicated Interface") or line.startswith("vPC Status:"):
             continue
         elif iface and indent and line.startswith("Port description is"):
@@ -168,7 +169,7 @@ def parse_cisco_nxos_flogi(device_name, text):
 def map_interfaces(switch, data):
     if not data:
         return {}
-    return {iface["name"]: iface for iface in data}
+    return {iface["switchport"]: iface for iface in data}
 
 
 def parse_hp_comware_interfaces(device_name, text):
@@ -237,18 +238,18 @@ def parse_hp_comware_interfaces(device_name, text):
         line = line.strip()
 
         if not iface:
-            if indent in (0, 1) and 'current state:' in line:
+            if indent in (0, 1) and "current state:" in line:
                 # comware 5
                 line = line.split()
-                iface = {"name": line[0], "state": line[3].lower()}
+                iface = {"switchname": device_name, "switchport": line[0], "state": line[3].lower()}
             elif indent == 0:
                 # comware 7, state is in a dedicated line
-                iface = {"name": line}
-        elif indent == 0 and line.startswith("Media type is"):
+                iface = {"switchname": device_name, "switchport": line}
+        elif indent in (0, 1) and "port hardware type is" in line.lower():
             line = line.split(", ")
-            if line[1].split()[-1].startswith("STACK_"):
+            if line[-1].split()[-1].startswith("STACK_"):
                 iface["stack"] = True
-        elif indent == 0:
+        elif indent in (0, 1):
             csplit = line.split(": ", 1)
             if csplit[0] == "Current state":
                 iface["state"] = csplit[1].lower()
