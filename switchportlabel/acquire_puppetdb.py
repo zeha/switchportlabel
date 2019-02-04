@@ -20,7 +20,7 @@ def ssh_curl_into_file(device_name, fact_name, outfile):
 
 def acquire(device_name, connect_options, datadir):
     print("Connecting to", device_name)
-    for fact_name in ["fibrechannel", "lldp"]:
+    for fact_name in ["fibrechannel", "ipmi", "lldp", "networking"]:
         with open("%s/%s.%s.json" % (datadir, device_name, fact_name), "wt") as fp:
             ssh_curl_into_file(device_name, fact_name, fp)
 
@@ -33,6 +33,15 @@ def read_fibrechannel(datadir):
                 if not el["value"]["hosts"]:
                     continue
                 data[el["certname"]] = el["value"]["hosts"]
+    return data
+
+
+def read_ipmi(datadir):
+    data = {}
+    for fn in glob("%s/*.ipmi.json" % datadir):
+        with open(fn, "rt") as fp:
+            for el in json.load(fp):
+                data[el["certname"]] = el["value"]
     return data
 
 
@@ -54,3 +63,18 @@ def read_lldp(datadir):
                     )
 
     return ifaces
+
+
+def read_networking(datadir):
+    data = {}
+    for fn in glob("%s/*.networking.json" % datadir):
+        with open(fn, "rt") as fp:
+            for el in json.load(fp):
+                interfaces = {
+                    k: {"mac": val["mac"].replace(":", "").lower()}
+                    for k, val in el["value"]["interfaces"].items()
+                    if isinstance(val, dict) and (k.startswith("eth") or k.startswith("en")) and "mac" in val
+                }
+                data[el["certname"]] = interfaces
+
+    return data

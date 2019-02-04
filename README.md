@@ -5,7 +5,7 @@ Data acquisition is done using PuppetDB for hosts and direct SSH for switches.
 
 # Quickstart
 
-* Copy `facter/*.rb` into your Puppet setup, so all physical hosts collect the `fibrechannel` and `lldp` information.
+* Copy `facter/*.rb` into your Puppet setup, so all physical hosts collect the `fibrechannel`, `lldp` and `ipmi` information.
 
 On a sufficiently privileged host, with Python 3 (preferably 3.7):
 
