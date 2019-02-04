@@ -28,7 +28,7 @@ def format_description(switchport):
 
     elif remote_switchname:
         type = "Core"
-        if remote_switchport == 'mgmt0':
+        if remote_switchport == "mgmt0":
             type = "Cust"
 
         if remote_switchport:
@@ -76,7 +76,7 @@ def configure(switches, lldp_ifaces, puppetdb_fc):
 
     for switchname, switch in switches.items():
         for portname, detail in switch["interfaces"].items():
-            if portname == 'mgmt0':
+            if portname == "mgmt0":
                 # Ignore management port, the LLDP info is probably not that good.
                 continue
             detail["new_description"] = format_description(detail)

@@ -11,7 +11,17 @@ ACQUIRE_COMMANDS = {
         "hp_comware-7": "display lldp neighbor-information agent nearest-bridge verbose",
         "hp_comware-5": "display lldp neighbor-information",
     },
+    "mactable": {"cisco_nxos": "show mac address-table dynamic | json", "hp_comware": "display mac-address dynamic"},
 }
+
+
+def expand_hp_comware_interface_name(shortname):
+    return (
+        shortname.replace("XGE", "Ten-GigabitEthernet")
+        .replace("BAGG", "BridgeAggregation")
+        .replace("FGE", "Forty-GigEthernet")
+        .replace("GE", "GigabitEthernet")
+    )
 
 
 def parse_cisco_nxos_interfaces(device_name, text):
@@ -355,12 +365,46 @@ def parse_hp_comware_lldp(device_name, text):
     return ifaces
 
 
+def map_mactable(switch, data):
+    return data or []
+
+
+def parse_cisco_nxos_mactable(device_name, json_text):
+    mactable = []
+    rows = json.loads(json_text)["TABLE_mac_address"]["ROW_mac_address"]
+    for row in rows:
+        entry = {
+            "address": row["disp_mac_addr"].replace(".", "").lower(),
+            "vlan": row["disp_vlan"],
+            "switchname": device_name,
+            "switchport": row["disp_port"],
+        }
+        mactable.append(entry)
+    return mactable
+
+
+def parse_hp_comware_mactable(device_name, text):
+    mactable = []
+    for line in text.splitlines()[1:]:
+        if line.startswith("  --- ") or not line:
+            continue
+        line = line.split()
+        entry = {
+            "address": line[0].replace("-", "").lower(),
+            "vlan": line[1],
+            "switchname": device_name,
+            "switchport": expand_hp_comware_interface_name(line[3]),  # expand for comware5
+        }
+        mactable.append(entry)
+    return mactable
+
+
 def connect_options(device_options):
     return {
-        'ip': device_options['ip'],
-        'username': device_options['username'],
-        'password': device_options['password'],
-        'device_type': device_options['device_type'],
+        "ip": device_options["ip"],
+        "username": device_options["username"],
+        "password": device_options["password"],
+        "device_type": device_options["device_type"],
     }
 
 
@@ -369,7 +413,7 @@ def acquire(device_name, device_options, datadir):
     device_type_flavor = device_options.get("device_type_flavor", "")
     total = {"device_type": device_type, "device_type_flavor": device_type_flavor, "device_name": device_name}
 
-    if device_type != 'none':
+    if device_type != "none":
         print("Connecting to", device_name)
         try:
             conn = Netmiko(**connect_options(device_options))

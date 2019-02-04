@@ -42,7 +42,7 @@ def format_hp_comware(ports):
 
 def format_for(switch):
     device_type = switch["device_type"]
-    if device_type == 'none':
+    if device_type == "none":
         return None
     elif device_type == "cisco_nxos":
         return format_cisco_nxos(switch["interfaces"])
