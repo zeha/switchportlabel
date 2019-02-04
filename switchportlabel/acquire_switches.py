@@ -246,7 +246,8 @@ def parse_hp_comware_interfaces(device_name, text):
                 # comware 7, state is in a dedicated line
                 iface = {"switchname": device_name, "switchport": line}
         elif indent in (0, 1) and "port hardware type is" in line.lower():
-            line = line.split(", ")
+            # Could also be "Media type is stack wire,Port hardware type is STACK_SFP_PLUS"
+            line = line.split(",")
             if line[-1].split()[-1].startswith("STACK_"):
                 iface["stack"] = True
         elif indent in (0, 1):
