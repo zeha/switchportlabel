@@ -79,11 +79,12 @@ def do_configure(apply_changes):
 
     switches = acquire_switches.read_switches(DATADIR_SWITCHES)
 
-    lldp_ifaces = acquire_puppetdb.read_lldp(DATADIR_PUPPETDB)
+    hosts_fc = acquire_puppetdb.read_fibrechannel(DATADIR_PUPPETDB)
+    hosts_ipmi = acquire_puppetdb.read_ipmi(DATADIR_PUPPETDB)
+    hosts_lldp = acquire_puppetdb.read_lldp(DATADIR_PUPPETDB)
+    hosts_networking = acquire_puppetdb.read_networking(DATADIR_PUPPETDB)
 
-    puppetdb_fc = acquire_puppetdb.read_fibrechannel(DATADIR_PUPPETDB)
-
-    configure(switches, lldp_ifaces, puppetdb_fc)
+    configure(switches, hosts_fc, hosts_ipmi, hosts_lldp, hosts_networking)
 
     for switchname, switch in switches.items():
         linesets = format_for(switch)
