@@ -4,14 +4,19 @@ import json
 
 
 ACQUIRE_COMMANDS = {
-    "interfaces": {"cisco_nxos": "show int", "hp_comware": "display interface"},
+    "interfaces": {"cisco_nxos": "show int", "hp_comware": "display interface", "hp_procurve": "display interface"},
     "flogi": {"cisco_nxos": "show flogi database"},
     "lldp": {
         "cisco_nxos": "show lldp neighbors detail | json",
+        "hp_procurve": "show lldp info remote-device ethernet all",
         "hp_comware-7": "display lldp neighbor-information agent nearest-bridge verbose",
         "hp_comware-5": "display lldp neighbor-information",
     },
-    "mactable": {"cisco_nxos": "show mac address-table dynamic | json", "hp_comware": "display mac-address dynamic"},
+    "mactable": {
+        "cisco_nxos": "show mac address-table dynamic | json",
+        "hp_comware": "display mac-address dynamic",
+        "hp_procurve": "show mac-address ethernet all",
+    },
 }
 
 
@@ -223,6 +228,8 @@ def parse_hp_comware_interfaces(device_name, text):
     ifaces = []
     for line in text.splitlines():
         if line == "" and iface:
+            if device_name == "ars24-egk14-sw01":
+                print(iface)
             ifaces.append(iface)
             iface = None
         if not line:
@@ -265,6 +272,101 @@ def parse_hp_comware_interfaces(device_name, text):
     if iface:
         ifaces.append(iface)
     return ifaces
+
+
+parse_hp_procurve_interfaces = parse_hp_comware_interfaces
+
+# def parse_hp_procurve_interfaces(device_name, text):
+#     """
+#     1 current state: DOWN
+#     IP Packet Frame Type: n/a, Hardware Address: 38eaa7-b0f23f
+#     Description: 1 interface
+#     Loopback is n/a
+#     Media type is twisted Pair
+#     Port hardware type is 100/1000T
+#     1000Mbps-speed mode,  full-duplex mode
+#     Link speed type is autonegotiation, link duplex type is autonegotiation
+#     Flow-control is not enabled
+#     The Maximum Frame Length is 9216
+#     Broadcast MAX-ratio: n/a
+#     Unicast MAX-ratio: n/a
+#     Multicast MAX-ratio:  n/a
+#     Jumbo frame: [ see "show jumbos"]
+#     PVID : 1
+#     Mdi type: MDI
+#     Link delay is n/a
+#     Port link-type: n/a
+#     Tagged   VLAN ID : none
+#     Untagged VLAN ID : 1
+#     Port priority: No-override
+#     Last clearing of counters: n/a
+#     Peak value of input: n/a
+#     Peak value of output: n/a
+#     Last 300 seconds input:  0 packets/sec 0 bytes/sec 0%
+#     Last 300 seconds output:  0 packets/sec 0 bytes/sec 0%
+#     Input (total):  0 packets, 0 bytes
+#             0 unicasts, 0 broadcasts, 0 multicasts, 0 pauses
+#     Input (normal):  0 packets, 0 bytes
+#             0 unicasts, 0 broadcasts, 0 multicasts, 0 pauses
+#     Input:  0 input errors, 0 runts, 0 giants, n/a throttles
+#             0 CRC, 0 frame, n/a overruns, n/a aborts
+#             n/a ignored, n/a parity errors
+#     Output (total):  0 packets, 0 bytes
+#             0 unicasts, 0 broadcasts, 0 multicasts, 0 pauses
+#     Output (normal):  0 packets, 0 bytes
+#             0 unicasts, 0 broadcasts, 0 multicasts, 0 pauses
+#     Output: 0 output errors, n/a underruns, n/a buffer failures
+#             n/a aborts, 0 deferred, 0 collisions, 0 late collisions
+#             n/a lost carrier, n/a no carrier
+
+#     """
+
+#     iface = None
+#     ifaces = []
+#     for line in text.splitlines():
+#         if line == "" and iface:
+#             ifaces.append(iface)
+#             iface = None
+#         if not line:
+#             continue
+
+#         indent = 0
+#         for char in line:
+#             if char == " ":
+#                 indent += 1
+#             else:
+#                 break
+
+#         line = line.strip()
+
+#         if not iface:
+#             if indent in (0, 1) and "current state:" in line:
+#                 # comware 5
+#                 line = line.split()
+#                 iface = {"switchname": device_name, "switchport": line[0], "state": line[3].lower()}
+#             elif indent == 0:
+#                 # comware 7, state is in a dedicated line
+#                 iface = {"switchname": device_name, "switchport": line}
+#         elif indent in (0, 1) and "port hardware type is" in line.lower():
+#             # Could also be "Media type is stack wire,Port hardware type is STACK_SFP_PLUS"
+#             line = line.split(",")
+#             if line[-1].split()[-1].startswith("STACK_"):
+#                 iface["stack"] = True
+#         elif indent in (0, 1):
+#             csplit = line.split(": ", 1)
+#             if csplit[0] == "Current state":
+#                 iface["state"] = csplit[1].lower()
+#             elif csplit[0] == "Description":
+#                 iface["description"] = csplit[1]
+#             elif csplit[0] == "Description":
+#                 iface["description"] = csplit[1]
+#             elif csplit[0] == "IP packet frame type" and csplit[1].startswith("Ethernet"):
+#                 iface["type"] = "Ethernet"
+#                 iface["address"] = csplit[1].split(",")[1].split(":")[1].strip().replace("-", "")
+
+#     if iface:
+#         ifaces.append(iface)
+#     return ifaces
 
 
 def map_lldp(switch, data):
@@ -470,6 +572,8 @@ def apply_config(device_name, device_options, lines):
             print(conn.send_command("copy running-config startup-config"))
         elif device_type == "hp_comware":
             print(conn.send_command("save main force"))
+        elif device_type == "hp_procurve":
+            print(conn.send_command("write memory"))
         else:
             print("ERROR: configuration not saved, as device_type %s is unhandled" % device_type)
     finally:
