@@ -51,10 +51,7 @@ def format_hp_procurve(ports):
         if new_description and new_description != old_description:
             if old_description:
                 port_lines.append("  # before: %s" % (old_description,))
-            port_lines.append("  %s %s" % (command, new_description))
-        # elif detail.get('description', None):
-        #     port_lines.append("-- was %s" % detail['description'])
-        #     port_lines.append("  no %s" % command)
+            port_lines.append("  %s \"%s\"" % (command, new_description))
 
         if port_lines:
             linesets.append(["interface %s" % switchport] + port_lines + ["quit"])

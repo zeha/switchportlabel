@@ -567,6 +567,8 @@ def apply_config(device_name, device_options, lines):
 
     try:
         conn = Netmiko(**connect_options(device_options))
+        if device_type == 'hp_procurve':
+            lines = [line for line in lines if not line.strip().startswith('#')]
         print(conn.send_config_set(lines))
         if device_type in ("cisco_ios", "cisco_nxos"):
             print(conn.send_command("copy running-config startup-config"))
