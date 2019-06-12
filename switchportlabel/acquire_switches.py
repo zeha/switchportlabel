@@ -231,8 +231,6 @@ def parse_hp_comware_interfaces(device_name, text):
     ifaces = []
     for line in text.splitlines():
         if line == "" and iface:
-            if device_name == "ars24-egk14-sw01":
-                print(iface)
             ifaces.append(iface)
             iface = None
         if not line:
