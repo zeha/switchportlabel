@@ -112,10 +112,13 @@ def parse_cisco_nxos_interfaces(device_name, text):
             if iface:
                 ifaces.append(iface)
             name = wsplit[0]
+            aliases = [name]
             name = name.replace("Ethernet", "Eth")
             name = name.replace("port-channel", "Po")
+            if name == aliases[0]:
+                aliases = []
             state = wsplit[2]  # up/down
-            iface = {"switchname": device_name, "switchport": name, "state": state}
+            iface = {"switchname": device_name, "switchport": name, "state": state, "switchport_aliases": aliases}
         elif iface and indent and line.startswith("Dedicated Interface") or line.startswith("vPC Status:"):
             continue
         elif iface and indent and line.startswith("Port description is"):
@@ -252,6 +255,7 @@ def parse_hp_comware_interfaces(device_name, text):
             elif indent == 0:
                 # comware 7, state is in a dedicated line
                 iface = {"switchname": device_name, "switchport": line}
+            iface["switchport_aliases"] = []
         elif indent in (0, 1) and "port hardware type is" in line.lower():
             # Could also be "Media type is stack wire,Port hardware type is STACK_SFP_PLUS"
             line = line.split(",")

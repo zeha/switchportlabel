@@ -6,8 +6,16 @@ def set_port_attr(switches, switchname, switchport, attr, value, overwrite=False
         print("I: switch", switchname, "not configured, ignoring")
         return
     if switchport not in switches[switchname]["interfaces"]:
-        print("I: switch", switchname, "port", switchport, "not found, ignoring")
-        return
+        switchport_alias = None
+        for switchport_real, iface in switches[switchname]["interfaces"].items():
+            if switchport in iface['switchport_aliases']:
+                switchport_alias = switchport_real
+                break
+        if switchport_alias:
+            switchport = switchport_alias
+        else:
+            print("I: switch", switchname, "port", switchport, "not found, ignoring")
+            return
     if overwrite or attr not in switches[switchname]["interfaces"][switchport]:
         switches[switchname]["interfaces"][switchport][attr] = value
 
