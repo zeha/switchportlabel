@@ -89,6 +89,9 @@ def find_unique_mac(switches, mac):
 def link_hosts_ipmi(switches, hosts_ipmi):
     for hostname, ifaces in hosts_ipmi.items():
         for host_iface in ifaces:
+            if host_iface.get("mac", None) is None:
+                print("I: host_iface has no mac", hostname, host_iface)
+                continue
             iface = find_unique_mac(switches, host_iface["mac"])
             if iface:
                 set_port_attr(switches, iface["switchname"], iface["switchport"], "hostname", hostname)
